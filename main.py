@@ -1,4 +1,4 @@
-import re, json, math, random, requests, pandas as pd, copy
+import re, json, math, random#, requests, pandas as pd, copy
 from colorama import Fore, Back, Style, init
 from replit import db
 from tabulate import tabulate
@@ -233,8 +233,8 @@ Enter index of mode to play with:
 
   moveSetting = input()
   while moveSetting not in ("3", "4"):
-    moveSetting = int(input("That index is not functional at this moment. Please choose a different game mode. "))
-  return moveSetting
+    moveSetting = input("That game mode is not functional at this moment. Please choose a different index. ")
+  return int(moveSetting)
 
 #------------- make move-sets -------------#
 def init_movesets(moveSetting, player):
@@ -248,20 +248,20 @@ def init_movesets(moveSetting, player):
   global p1_moves
   global p2_moves
   
-  if moveSetting == '1': #Pre-set
+  if moveSetting == 1: #Pre-set
     print(1)
-  elif moveSetting == '2': #Choose
+  elif moveSetting == 2: #Choose
     print(2)
     
     
-  elif moveSetting == '3': #Sandbox
+  elif moveSetting == 3: #Sandbox
     
     exec(f"""for i in range(1,5):
       while len({player}_moves) != 4:
         try: 
           move_to_add = input(f'{fore}' + 'Player {player[1]}, select move: ')
           if move_to_add == 'test' and len({player}_moves) == 0:
-            {player}_moves.extend(("Scary Face","Calm Mind","Power-Up Punch","Mud Shot"))
+            {player}_moves.extend(("Scary Face","Calm Mind","Flame Charge","Mud Shot"))
             break
           (moves_formatted[moves_formatted.index(move_to_add)])
           {player}_moves.append(move_to_add)
@@ -338,9 +338,9 @@ def critical():
   random_num = random.randrange(0, 400)
   if random_num // 4 <= crit_chance:
     print(Fore.YELLOW + "\nA critical hit!")
-    return 1.5
+    return True
   else: 
-    return 1
+    return False
 
 def random_roll():
   random_mult = random.randrange(85, 100) / 100
@@ -404,7 +404,11 @@ def do_damage(player, target, move):
 
 #damage calc (add critical ignoring stat changes (separate calcs for if critical and if not)) 
 
-  damage = eval(f"math.floor(((((((2 * {player}_stats['{player}_level']) / 5) + 2) * movesdata['{move}']['basePower'] * (attacker_AtkorSpa(player, move) / target_AtkorSpa(target, move))) / 50) + 2) * weather() * critical() * random_roll() * STAB('{player}', '{move}') * type_effectiveness(target, move) * is_burned())")
+  if critical():
+    damage = eval(f"math.floor(((((((2 * {player}_stats['{player}_level']) / 5) + 2) * movesdata['{move}']['basePower'] * (attacker_AtkorSpa(player, move) / target_AtkorSpa(target, move))) / 50) + 2) * weather() * 1.5 * random_roll() * STAB('{player}', '{move}') * type_effectiveness(target, move) * is_burned())")
+    #Check how stats are calculated and somehow nullify the defensive stat changes. Please. (STILL DO 7.23)
+  else: 
+    damage = eval(f"math.floor(((((((2 * {player}_stats['{player}_level']) / 5) + 2) * movesdata['{move}']['basePower'] * (attacker_AtkorSpa(player, move) / target_AtkorSpa(target, move))) / 50) + 2) * weather() * random_roll() * STAB('{player}', '{move}') * type_effectiveness(target, move) * is_burned())")
 
   if damage == 0:
     damage = 1
@@ -456,16 +460,6 @@ def return_statMultiplier(player, move_category):
   
   return stat_multiplier
   
-#------------- Check if move has bonus stat change --------------#
-
-def check_statChange(selected_move):
-  try:
-    movesdata[selected_move]['boosts']
-    return True
-  except:
-    #try: secondary boosts, etc., etc.
-    return False
-
 #----------------- Do stat change -----------------#
 
 def do_statChange(player, target, selected_move):
@@ -512,7 +506,11 @@ def check_moveHit(player, move):
 
     #------- check if secondary happens (hits) -------#
 
-def check_secondaryHit(chance):
+def check_Hit(chance):
+
+  if chance == True:
+    return True
+    
   randomNum = random.randint(0, 99)
 
   if randomNum in range(chance):
@@ -537,7 +535,7 @@ def do_secondaryStatChange_boosts(move_target, move, secondary):
 def do_secondary(player, target, move):
   secondary = movesdata[move]["secondary"]
 
-  if check_secondaryHit(secondary["chance"]):
+  if check_Hit(secondary["chance"]):
     if "self" in secondary:
       do_secondaryStatChange_self(player, move, secondary)
     elif "boosts" in secondary:
@@ -566,20 +564,25 @@ def move(player, selected_move):
   
   if check_moveHit(player, selected_move):
     if player == "p1":
-      if eval(f"movesdata['{selected_move}']['basePower'] != 0"): 
+      if movesdata[selected_move]['category'] != 'Status': 
         do_damage('p1', target, selected_move)
         
-      if check_statChange(selected_move):
+      if "boosts" in movesdata[selected_move]:
         do_statChange('p1', target, selected_move)
 
       if movesdata[selected_move]["secondary"] != None:
         do_secondary(player, target, selected_move)
         
     else:
-      if eval(f"movesdata['{selected_move}']['basePower'] != 0"): 
+        
+      if movesdata[selected_move]['category'] != 'Status':  
         do_damage('p2', target, selected_move)
-      
-      if check_statChange(selected_move):
+      else: 
+        return 1
+         #DO STATUS
+        #will add remaining turns, percentage to break free (thaw for freeze), and % damage done each turn to player_stats dictionary. There may be more that I'm missing, but I know that those three are critical.
+        # Also, add this ^ to the p1 case. Haha.
+      if "boosts" in movesdata[selected_move]:
         do_statChange('p2', target, selected_move)
         
       if movesdata[selected_move]["secondary"] != None:
@@ -608,10 +611,15 @@ For information on a move, type '/data [move]'.
       if "/data" in selected_move:
         selected_move = (re.sub(reSymbols,"", selected_move)).lower()
         selected_move = re.sub("'", "", selected_move)
+        selected_move = selected_move[4:]
+        print(selected_move)
+        
         try:
           move_blurb = f"{movesdata[selected_move[5:]]['shortDesc']}\nBase Power: {movesdata[selected_move[5:]]['basePower']}"
           print('\n' + Fore.RESET + move_blurb + '\n')
         except: print("Invalid input. Please re-type.\n")
+
+      
       else: print("Move not valid. Please re-type.\n")
     else: 
       selected_move = (re.sub(reSymbols,"", selected_move)).lower()
@@ -629,12 +637,13 @@ def checkWin():
   elif p2_stats['p2_hp'] == 0:
     print(Fore.CYAN + "P1 Won!")
     return False
+    
 #---------------------------#
   
 def do_turn(player):
   
   tell_TurnStart()
-  move(player, select_move(player) )
+  move(player, select_move(player))
   
 #------------------------------------------------#
 def do_battle():
@@ -660,17 +669,22 @@ if __name__ == "__main__":
   else: 
     if ask_selectPKMN() == 'test':
       p1_pokemon = 'abomasnow'; p1_pokemonName = pokedex[p1_pokemon]['name']; p1_level = 50; p1_nature = 'Adamant'; p2_pokemon = 'raikou'; p2_pokemonName = pokedex[p2_pokemon]['name']; p2_level = 40; p2_nature = 'Serious'
-
   
   init_stats()
   #print(f"\nP1 Stats: {p1_stats}")
   #print(f"\nP2 Stats: {p2_stats}")
   
-#prints "X vs Y" (cosmetic)
+#prints "X vs Y" (cosmetic) 
   print("\n",p1_pokemonName, "vs", p2_pokemonName,"\n")
 
   moveSetting = ask_moveSettings()
+  
   p1_moves = []
   p2_moves = []
   init_movesets(moveSetting, 'p1');init_movesets(moveSetting,'p2')
+  p1_stats.update({'p1_status' : None, 'p1_statusTurnCount' : 0, 'p1_statusChanceThaw' : 0});
+  p2_stats.update({'p2_status' : None, 'p2_statusTurnCount' : 0, 'p2_statusChanceThaw' : 0}) 
+  
   do_battle()
+
+#5.23.23 vjerovatno neće prenijeti na VB. previše i previše različito (želim da ovo ostane bazirano na tekstu. smiješno je)
